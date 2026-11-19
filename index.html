@@ -183,7 +183,10 @@ button.sub.ng{color:#fff;border-color:var(--ng)}
 .thinking{display:inline-block;animation:bob2 1s infinite}
 @keyframes bob2{50%{transform:translateY(-3px)}}
 
-.top-info { position: fixed; right: 16px; top: calc(var(--top-exclusion) + 58px); z-index: 95; padding: 4px; pointer-events: none; }
+.turn-timer{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 8px;width:max-content;max-width:100%;background:#fff;border-radius:999px;padding:6px 16px;box-shadow:var(--shadow);font-weight:900;font-size:15px;border:2px solid var(--line)}
+.turn-timer .timer{font-size:22px;min-width:3.2em;text-align:center}
+.turn-timer .tlbl{font-size:12px;color:var(--sub)}
+.turn-timer.warn{border-color:var(--ng);color:var(--ng);animation:pulse 1s infinite}
 
 .hidden{display:none!important}
 .hbtn{font-family:inherit;cursor:pointer;background:#fff;color:#3b2f4a;border:2px solid #f0dce6;box-shadow:0 3px 0 #f0dce6;padding:6px 10px;font-size:14px;font-weight:800;border-radius:12px}
@@ -292,7 +295,7 @@ button.sub.ng{color:#fff;border-color:var(--ng)}
 <!-- ================= GAME SCREEN ================= -->
 <div id="scr-game" class="screen" style="padding: 0;">
 <div class="game-top"><button class="sub small" onclick="confirmLeave(true)">🚪 退室</button><span class="muted" id="game-room"></span></div>
-<div class="top-info"><div id="timer-pill" class="pill hidden">⏳ <span id="timer-val" class="timer"></span></div></div>
+
 <div id="watch-bar" class="watch-bar hidden"></div>
 <div id="vote-call" class="hidden">
 <div>⚠️ <span id="vote-call-sub"></span></div>
@@ -301,6 +304,7 @@ button.sub.ng{color:#fff;border-color:var(--ng)}
 
 <div style="padding: 12px 12px 0;">
 <div class="players" id="players-strip"></div>
+<div id="timer-pill" class="turn-timer hidden">⏳ <span class="tlbl" id="timer-lbl">のこり</span><span id="timer-val" class="timer"></span></div>
 <div class="status" id="status"></div>
 </div>
 
@@ -823,7 +827,7 @@ async list(){
 if (this.mode === 'mock') return [{ code: '1234', n: 1, max: 4 }];
 try {
 const res = await window.AgentSDK.room.getPublicRoomList();
-if (res.errno === 0) return res.data.list.map(x => ({ code: String(x.room_id), n: x.gamer_num, max: x.max_players }));
+if (res.errno === 0) return (res.data.list || []).filter(x => (x.gamer_num|0) > 0).map(x => ({ code: String(x.room_id), n: x.gamer_num, max: x.max_players }));
 } catch(e){}
 return [];
 },
@@ -1713,7 +1717,9 @@ const upd = () => {
 if (!S.deadline || !(S.phase==='DRAW'||S.phase==='COMPOSE'||S.phase==='VOTE')) { pill.classList.add('hidden'); return; }
 const sec = Math.max(0, (S.deadline - Date.now())/1000);
 pill.classList.remove('hidden'); $('timer-val').textContent = fmtTime(sec);
-pill.style.color = sec<=10 ? 'var(--ng)' : '';
+const tp = S.players.find(p=>p.id===S.turnId);
+$('timer-lbl').textContent = S.phase==='VOTE' ? '投票 のこり' : S.phase==='DRAW' ? `${tp ? tp.name : ''} カードを引く のこり` : `${tp ? tp.name : ''} 連想タイム のこり`;
+pill.classList.toggle('warn', sec<=10);
 };
 upd(); clientTick = setInterval(upd, 500);
 }
