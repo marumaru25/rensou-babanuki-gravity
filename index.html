@@ -120,6 +120,8 @@ display: block;
 .wcard.back.sel,.wcard.hover{transform:translateY(-12px) rotate(-3deg);border-color:var(--acc)!important;box-shadow:0 8px 0 var(--acc),0 0 0 4px rgba(123,108,255,.25)!important}
 .wcard.hover::before{content:"👆";position:absolute;top:-30px;left:50%;transform:translateX(-50%);font-size:22px;animation:bob .8s infinite}
 @keyframes bob{50%{transform:translate(-50%,-5px)}}
+.target-note{text-align:center;font-weight:900;font-size:14px;color:var(--acc);background:#f4f1ff;border:2px dashed var(--acc);border-radius:14px;padding:10px;margin:0 0 4px}
+.wcard.target.hover{animation:none}
 .wcard.target{border-color:var(--acc);background:#f4f1ff;animation:shiver .5s infinite}
 @keyframes shiver{0%,100%{transform:translateY(-6px) rotate(0)}25%{transform:translateY(-6px) rotate(-2deg)}75%{transform:translateY(-6px) rotate(2deg)}}
 .wcard.mini{width:64px;height:84px;font-size:13px;cursor:default}
@@ -1522,9 +1524,7 @@ stage.innerHTML = `<h2>🂠 ${esc(src.name)} の手札（${src.hand.length}枚�
 const row = $('watch-row');
 src.hand.forEach((_,i)=>{ const d=document.createElement('div'); d.className='wcard back static'+(i===hv?' hover':''); d.textContent='？'; row.appendChild(d); });
 } else if (iAmTarget) {
-stage.innerHTML = `<h2>😱 ${tn} がどれを抜こうか考え中…</h2><div class="hand" id="watch-row" style="padding-top:30px"></div><div class="muted" style="text-align:center;margin-top:8px">${hv>=0?'👆 のカードが狙われています！':'まだ選んでいません'}</div>`;
-const row = $('watch-row');
-src.hand.forEach((cid,i)=>{ const d=document.createElement('div'); d.className='wcard static mini'+(i===hv?' hover':''); d.textContent=W(cid); row.appendChild(d); });
+stage.innerHTML = `<div class="target-note">${hv>=0 ? `👇 ${watching ? vName + 'の' : ''}手札の <b>👆</b> のカードが狙われています！` : `👇 ${tn} が${watching ? vName + 'の' : 'あなたの'}手札を見ています…`}</div>`;
 } else {
 stage.innerHTML = `<h2>👀 ${tn} → ${esc(src.name)} のカードを選択中</h2><div class="hand" id="watch-row" style="padding-top:30px"></div>`;
 const row = $('watch-row');
@@ -1574,7 +1574,7 @@ $('hand-count').textContent = `${hand.length}枚`;
 const el = $('my-hand'); el.innerHTML = ''; el.classList.toggle('readonly', watching);
 hand.forEach(id=>{
 const d = document.createElement('div');
-d.className = 'wcard' + (!watching && selCards.includes(id)?' sel':'') + (id===newId?' new':'') + (id===targetCid?' target':'') + (watching?' static':'') + (!watching && phaseChanged && !lastMyHandIds.includes(id)?' deal':'');
+d.className = 'wcard' + (!watching && selCards.includes(id)?' sel':'') + (id===newId?' new':'') + (id===targetCid?' target hover':'') + (watching?' static':'') + (!watching && phaseChanged && !lastMyHandIds.includes(id)?' deal':'');
 d.dataset.id = id;
 d.textContent = W(id);
 el.appendChild(d);
