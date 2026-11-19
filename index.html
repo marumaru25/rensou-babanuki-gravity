@@ -845,7 +845,7 @@ if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText
 else fallback();
 }
 window.confirmLeave = async function(inGame){
-const ok = await askConfirm('退出しますか？', inGame ? 'ゲームの途中で抜けると棄権になります。' : 'ルームから出ます。', '退出する');
+const ok = await askConfirm('退出しますか？', inGame ? 'あとで同じ席に復帰できます。\n抜けている間も時間は進み、自分の番は時間切れで自動パスになります。' : 'ルームから出ます。', '退出する');
 if (ok) leaveRoom(true);
 };
 
@@ -950,13 +950,16 @@ setTimeout(()=>{ if (NET.room && !isHost && !S.players.find(p=>p.id===me.id)) to
 }
 
 window.leaveRoom = async function(manual){
+const lastCode = NET.room;
+const wasInGame = !!lastCode && S.phase && S.phase !== 'LOBBY' && S.phase !== 'RESULT' && (S.order||[]).includes(me.id);
 if (manual && NET.room) send({type:'LEAVE', userId:me.id});
 await sleep(150);
-await NET.exit();
-if (manual) LS.del('rb_last_room');
+await NET.exit(wasInGame);
+if (manual && !wasInGame) LS.del('rb_last_room');
 clearInterval(hostTickTimer); clearInterval(clientTick); clearTimeout(revealTimer); clearInterval(pruneTimer);
 isHost=false; hostState=null; hostId=null; submitting=false; lastPhaseKey=''; viewAsId=null; S={phase:'LOBBY',players:[],settings:{hand:10,time:90,deck:'mix'}}; $('chat-msgs').innerHTML=''; myOrder=[];
-$('rejoin-panel').classList.add('hidden');
+if (wasInGame) { rememberRoom(lastCode); $('rejoin-code').textContent = lastCode; $('rejoin-panel').classList.remove('hidden'); $('btn-rejoin').onclick = () => joinRoom(lastCode, 'player'); }
+else $('rejoin-panel').classList.add('hidden');
 screen('login'); refreshRooms();
 };
 window.copyInvite = function(){
@@ -1048,14 +1051,14 @@ if (!ex || ex.bot || (ex.off && !manual) || ex.quit) return;
 const wasHost = ex.isHost;
 if (isHost) {
 if (hostState.phase === 'LOBBY' || hostState.phase === 'RESULT') { hostState.players = hostState.players.filter(x=>x.id!==uid); sysChat(`${ex.name} が退室しました`); }
-else { ex.off = true; if (manual) ex.quit = true; sysChat(`${ex.name} が${manual?'退室しました（棄権）':'切断されました'}`); if (manual) hostOnQuit(ex); else checkVoteDone(); }
+else { ex.off = true; sysChat(`${ex.name} が${manual?'退室しました':'切断されました'}（復帰できます）`); checkVoteDone(); }
 broadcast();
 } else if (wasHost) {
 const cand = S.players.filter(x=>x.id!==uid && !x.off && !x.quit && !x.bot);
 if (cand.length && cand[0].id === me.id) {
 isHost = true; hostState = JSON.parse(JSON.stringify(S)); hostState.epoch = (S.epoch|0) + 1; hostId = me.id;
 hostState.players.forEach(x=>x.isHost=false);
-const old = hostState.players.find(x=>x.id===uid); if (old) { old.off = true; if (manual) old.quit = true; }
+const old = hostState.players.find(x=>x.id===uid); if (old) { old.off = true; }
 const mine = hostState.players.find(x=>x.id===me.id); if (mine) mine.isHost = true;
 if (hostState.phase === 'LOBBY' || hostState.phase === 'RESULT') hostState.players = hostState.players.filter(x=>x.id!==uid);
 if (hostState.phase === 'REVEAL') scheduleNextTurn();
@@ -1120,8 +1123,8 @@ if (!p || p.rank || p.quit) { const n = nextActive(H, pid, 1); if (n) return beg
 H.turnId = pid; H.pending = null; H.result = null; H.drawnId = null; H.hover = null; H.turnSeq = (H.turnSeq|0) + 1;
 const prev = nextActive(H, pid, -1);
 H.drawFromId = prev ? prev.id : null;
-if (prev && prev.hand.length) { H.phase = 'DRAW'; prev.hand = shuffle(prev.hand); setDeadline(p.bot ? 20 : (p.off ? 5 : 45)); }
-else { H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : (p.off ? 5 : H.settings.time)); }
+if (prev && prev.hand.length) { H.phase = 'DRAW'; prev.hand = shuffle(prev.hand); setDeadline(p.bot ? 20 : 45); }
+else { H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : H.settings.time); }
 broadcast();
 }
 function setDeadline(sec){ hostState.deadline = sec ? Date.now() + sec*1000 : 0; }
@@ -1162,7 +1165,7 @@ H.lastTake = {n:H.takeN, from:src.id, to:p.id, cid};
 hlog(`🃏 ${p.name} が ${src.name} から1枚引いた`);
 if (src.hand.length === 0) finishPlayer(src, '最後の1枚を引かれて');
 if (checkEnd()) return;
-H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : (p.off ? 5 : H.settings.time));
+H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : H.settings.time);
 broadcast();
 return;
 }
@@ -1581,6 +1584,7 @@ el.appendChild(d);
 });
 if (!watching) lastMyHandIds = hand.slice();
 $('hand-hint').classList.toggle('hidden', watching || hand.length < 2);
+$('hand-hint').textContent = composing ? '👆 タップで選択（連想タイム中は並べ替えできません）' : '✋ 長押し（PCはドラッグ）で並べ替え';
 $('compose').classList.toggle('hidden', !composing);
 if (composing) {
 const n = selCards.length;
@@ -1638,9 +1642,10 @@ return best;
 };
 hand.addEventListener('pointerdown', e => {
 const card = e.target.closest('.wcard'); if (!card || st || hand.classList.contains('readonly')) return;
-st = {id:card.dataset.id, el:card, x:e.clientX, y:e.clientY, pid:e.pointerId, type:e.pointerType, armed:e.pointerType==='mouse', ghost:null, moved:false};
+const composingNow = !viewAsId && S.turnId === me.id && S.phase === 'COMPOSE';
+st = {id:card.dataset.id, el:card, x:e.clientX, y:e.clientY, pid:e.pointerId, type:e.pointerType, armed:e.pointerType==='mouse' && !composingNow, ghost:null, moved:false};
 dragActive = true;
-if (e.pointerType !== 'mouse') st.timer = setTimeout(() => { if (!st) return; st.armed = true; st.el.classList.add('lift'); if (navigator.vibrate) navigator.vibrate(25); }, 260);
+if (e.pointerType !== 'mouse' && !composingNow) st.timer = setTimeout(() => { if (!st) return; st.armed = true; st.el.classList.add('lift'); if (navigator.vibrate) navigator.vibrate(25); }, 260);
 });
 window.addEventListener('pointermove', e => {
 if (!st || e.pointerId !== st.pid) return;
