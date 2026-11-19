@@ -286,7 +286,7 @@ button.sub.ng{color:#fff;border-color:var(--ng)}
 <option value="20">20枚</option>
 </select>
 </div>
-<div class="row"><div style="flex:1">連想タイム</div><select id="set-time"><option value="60">60秒</option><option value="90">90秒</option><option value="120">120秒</option></select></div>
+<div class="row"><div style="flex:1">連想タイム</div><select id="set-time"><option value="60">60秒</option><option value="90">90秒</option><option value="120">120秒</option><option value="0">なし</option></select></div>
 <div class="row"><div style="flex:1">使用デッキ</div><select id="set-deck"><option value="mix" selected>ミックス</option><option value="easy">かんたん</option><option value="normal">ふつう</option><option value="mid">ちょいむず</option><option value="hard">むずかしい</option></select></div>
 </div>
 
@@ -1051,7 +1051,7 @@ if (!ex || ex.bot || (ex.off && !manual) || ex.quit) return;
 const wasHost = ex.isHost;
 if (isHost) {
 if (hostState.phase === 'LOBBY' || hostState.phase === 'RESULT') { hostState.players = hostState.players.filter(x=>x.id!==uid); sysChat(`${ex.name} が退室しました`); }
-else { ex.off = true; sysChat(`${ex.name} が${manual?'退室しました':'切断されました'}（復帰できます）`); checkVoteDone(); }
+else { ex.off = true; sysChat(`${ex.name} が${manual?'退室しました':'切断されました'}（復帰できます）`); if (hostState.turnId === uid && !hostState.deadline && (hostState.phase==='DRAW'||hostState.phase==='COMPOSE')) setDeadline(60); checkVoteDone(); }
 broadcast();
 } else if (wasHost) {
 const cand = S.players.filter(x=>x.id!==uid && !x.off && !x.quit && !x.bot);
@@ -1123,10 +1123,12 @@ if (!p || p.rank || p.quit) { const n = nextActive(H, pid, 1); if (n) return beg
 H.turnId = pid; H.pending = null; H.result = null; H.drawnId = null; H.hover = null; H.turnSeq = (H.turnSeq|0) + 1;
 const prev = nextActive(H, pid, -1);
 H.drawFromId = prev ? prev.id : null;
-if (prev && prev.hand.length) { H.phase = 'DRAW'; prev.hand = shuffle(prev.hand); setDeadline(p.bot ? 20 : 45); }
-else { H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : H.settings.time); }
+if (prev && prev.hand.length) { H.phase = 'DRAW'; prev.hand = shuffle(prev.hand); setDeadline(p.bot ? 20 : lim(p, 45)); }
+else { H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : lim(p, H.settings.time)); }
 broadcast();
 }
+// 制限時間なし設定のときは人間の時間制限を外す（抜けている人だけは60秒で自動パス）
+function lim(p, sec){ return (hostState.settings.time|0) === 0 ? (p && p.off ? 60 : 0) : sec; }
 function setDeadline(sec){ hostState.deadline = sec ? Date.now() + sec*1000 : 0; }
 
 function hostAction(from, a){
@@ -1135,7 +1137,7 @@ const p = H.players.find(x=>x.id===from);
 if (a.t === 'START') { if (from===me.id && H.phase==='LOBBY') hostStart(); return; }
 if (a.t === 'SETTINGS') { if (from===me.id && H.phase==='LOBBY') { const ns = a.s || {};
 const hand = [5,7,8,10,12,15,20].includes(ns.hand|0) ? ns.hand|0 : H.settings.hand;
-const time = [60,90,120].includes(ns.time|0) ? ns.time|0 : H.settings.time;
+const time = (ns.time !== undefined && [0,60,90,120].includes(+ns.time)) ? +ns.time : H.settings.time;
 const deck = ['mix','easy','normal','mid','hard'].includes(ns.deck) ? ns.deck : H.settings.deck;
 H.settings = {hand, time, deck}; broadcast(); } return; }
 if (a.t === 'ADD_BOT') { if (from===me.id) hostAddBot(); return; }
@@ -1165,7 +1167,7 @@ H.lastTake = {n:H.takeN, from:src.id, to:p.id, cid};
 hlog(`🃏 ${p.name} が ${src.name} から1枚引いた`);
 if (src.hand.length === 0) finishPlayer(src, '最後の1枚を引かれて');
 if (checkEnd()) return;
-H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : H.settings.time);
+H.phase = 'COMPOSE'; setDeadline(p.bot ? 60 : lim(p, H.settings.time));
 broadcast();
 return;
 }
@@ -1177,7 +1179,7 @@ const voters = H.players.filter(x=>x.role==='player' && (H.order||[]).includes(x
 H.pending = {by:p.id, ids:uniq, word, note, voters, votes:{}, why:{}};
 hlog(`📣 ${p.name}「${word}」(${uniq.length}枚)`);
 if (!voters.length) return resolveVote();
-H.phase = 'VOTE'; setDeadline(60);
+H.phase = 'VOTE'; setDeadline(lim(null, 60));
 broadcast(); pop(`「${word}」`, 'submit');
 botVotesFor(H.pending);
 return;
@@ -1584,7 +1586,7 @@ el.appendChild(d);
 });
 if (!watching) lastMyHandIds = hand.slice();
 $('hand-hint').classList.toggle('hidden', watching || hand.length < 2);
-$('hand-hint').textContent = composing ? '👆 タップで選択（連想タイム中は並べ替えできません）' : '✋ 長押し（PCはドラッグ）で並べ替え';
+$('hand-hint').textContent = (!watching && S.phase==='DRAW' && S.drawFromId===me.id) ? '🔒 相手が選んでいる間は並べ替えできません' : (composing ? '👆 タップで選択 / 長押し（PCはドラッグ）で並べ替え' : '✋ 長押し（PCはドラッグ）で並べ替え');
 $('compose').classList.toggle('hidden', !composing);
 if (composing) {
 const n = selCards.length;
@@ -1642,10 +1644,10 @@ return best;
 };
 hand.addEventListener('pointerdown', e => {
 const card = e.target.closest('.wcard'); if (!card || st || hand.classList.contains('readonly')) return;
-const composingNow = !viewAsId && S.turnId === me.id && S.phase === 'COMPOSE';
-st = {id:card.dataset.id, el:card, x:e.clientX, y:e.clientY, pid:e.pointerId, type:e.pointerType, armed:e.pointerType==='mouse' && !composingNow, ghost:null, moved:false};
+const lockNow = !viewAsId && S.phase === 'DRAW' && S.drawFromId === me.id;
+st = {id:card.dataset.id, el:card, x:e.clientX, y:e.clientY, pid:e.pointerId, type:e.pointerType, armed:e.pointerType==='mouse' && !lockNow, ghost:null, moved:false};
 dragActive = true;
-if (e.pointerType !== 'mouse' && !composingNow) st.timer = setTimeout(() => { if (!st) return; st.armed = true; st.el.classList.add('lift'); if (navigator.vibrate) navigator.vibrate(25); }, 260);
+if (e.pointerType !== 'mouse' && !lockNow) st.timer = setTimeout(() => { if (!st) return; st.armed = true; st.el.classList.add('lift'); if (navigator.vibrate) navigator.vibrate(25); }, 260);
 });
 window.addEventListener('pointermove', e => {
 if (!st || e.pointerId !== st.pid) return;
@@ -1719,6 +1721,7 @@ function startClientTick(){
 clearInterval(clientTick);
 const pill = $('timer-pill');
 const upd = () => {
+if (!S.deadline && S.settings && (S.settings.time|0) === 0 && (S.phase==='DRAW'||S.phase==='COMPOSE'||S.phase==='VOTE')) { pill.classList.remove('hidden','warn'); $('timer-lbl').textContent = '制限時間'; $('timer-val').textContent = 'なし'; return; }
 if (!S.deadline || !(S.phase==='DRAW'||S.phase==='COMPOSE'||S.phase==='VOTE')) { pill.classList.add('hidden'); return; }
 const sec = Math.max(0, (S.deadline - Date.now())/1000);
 pill.classList.remove('hidden'); $('timer-val').textContent = fmtTime(sec);
