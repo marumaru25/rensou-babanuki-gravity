@@ -433,7 +433,7 @@ button.sub.ng{color:#fff;border-color:var(--ng)}
 <div class="modal hidden" id="rules-modal" onclick="if(event.target===this) closeModal('rules-modal')">
 <div class="box">
 <h3>📖 連想ババ抜きのルール</h3>
-<div class="muted">3〜8人 ・ 15〜30分</div>
+<div class="muted">2〜8人 ・ 15〜30分</div>
 <ol>
 <li>全員に<b>単語カード</b>を配ります（枚数はロビーで設定、標準10枚）。最初の手番はランダム。</li>
 <li>手番の人は<b>前の人の伏せ札から1枚</b>選んで「このカードを引く」で確定（45秒）。選んでいる様子はみんなに見えます。</li>
@@ -1096,7 +1096,7 @@ function sysChat(text){ if (isHost) send({type:'CHAT', id:me.id, name:'SYSTEM', 
 function hostStart(){
 const H = hostState;
 const ps = H.players.filter(p=>p.role==='player' && !p.off);
-const min = NET.mode==='mock' ? 2 : 3;
+const min = 2;
 if (ps.length < min) return toast(`プレイヤーが${min}人以上必要です`, true);
 if (ps.length > 8) return toast('プレイヤーは8人までです', true);
 const deck = buildDeck(H.settings.deck);
@@ -1423,7 +1423,7 @@ $('btn-role').textContent = myRole==='spectator' ? '🎮 プレイヤーにす�
 $('set-hand').value = S.settings.hand; $('set-time').value = S.settings.time; $('set-deck').value = S.settings.deck;
 $('host-only-note').textContent = isHost ? '' : '（ホストが設定）';
 $('btn-start').style.display = isHost ? '' : 'none';
-const n = ps.filter(p=>p.role==='player' && !p.off).length, min = NET.mode==='mock'?2:3;
+const n = ps.filter(p=>p.role==='player' && !p.off).length, min = 2;
 $('start-note').textContent = isHost ? (n<min ? `あと${min-n}人で開始できます（CPUもOK）` : 'みんな揃ったらスタート！') : 'ホストの開始を待っています…';
 $('btn-start').disabled = n < min || n > 8;
 }
